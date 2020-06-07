@@ -3,6 +3,7 @@ package myk.assignment;
 import com.opencsv.CSVReader;
 import smile.License;
 import smile.Network;
+import smile.SMILEException;
 
 import java.io.FileReader;
 import java.util.*;
@@ -32,6 +33,7 @@ public class Assignment4 {
     }
 
     private static final double LOG2 = 1 / Math.log(2);
+    private static final double U = 4;
 
     private static void combinationsHelper(List<int[]> combinations, int[] data, int start, int end, int index) {
         if (index == data.length) {
@@ -83,7 +85,7 @@ public class Assignment4 {
                     // Main fraction: (n|x,y|)/(|x||y|)
                     double sumtmp = (numinst * crosscounts[av][tv]) / (acounts[av] * tcounts[tv]);
                     // Log bit (|x,y|/n) and update product
-                    sum += oneovernuminst * crosscounts[av][tv] * Math.log(sumtmp) * LOG2;
+                    sum += oneovernuminst * crosscounts[av][tv] * getLN(sumtmp);
                 }
             }
 
@@ -129,10 +131,6 @@ public class Assignment4 {
             System.out.println("Connecting " + nodes[0] + " and " + nodes[1]);
             net.addArc(nodes[0], nodes[1]);
         });
-        for (int h = net.getFirstNode(); h >= 0; h = net.getNextNode(h)) {
-            ReadAndUpdateNetwork.printNodeInfo(net, h); // prints all the info
-        }
-        net.writeFile("file.xdsl");
         return net;
     }
 
@@ -180,7 +178,7 @@ public class Assignment4 {
 
             // Create an object of filereader
             // class with CSV file as a parameter.
-            FileReader filereader = new FileReader("/Users/yasir/Desktop/playornot.csv");
+            FileReader filereader = new FileReader("/Users/yasir/Desktop/test1.csv");
 
             // create csvReader object passing
             // file reader as a parameter
@@ -194,27 +192,149 @@ public class Assignment4 {
             HashMap<String, Double> miScores = getMutualInfoScoreMap(colWiseData, colNamesArray);
             Network net = constructDAG(miScores, colWiseData);
             // get the BIC score for the DAG
-            double score = calculateBICForDAG(net);
-            double bestScore;
-            do {
-                bestScore = score;
-                updateNetworkUsingK2Approach(net);
-                score = calculateBICForDAG(net);
-            } while (score < bestScore);
+            double score = calculateBICForDAG(net, colWiseData, colNamesArray);
+            updateNetworkUsingK2Approach(net, colWiseData, colNamesArray);
+            double scoreNew = calculateBICForDAG(net, colWiseData, colNamesArray);
+            for (int h = net.getFirstNode(); h >= 0; h = net.getNextNode(h)) {
+                ReadAndUpdateNetwork.printNodeInfo(net, h); // prints all the info
+            }
+            net.writeFile("file.xdsl");
+            System.out.println("Old Score: " + score + " Score New: " + scoreNew);
+
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private static void updateNetworkUsingK2Approach(Network net) {
+    private static void updateNetworkUsingK2Approach(Network net, Map<String, List<Integer>> colWiseData, String[] colNamesArray) {
+        int[] allNodes = net.getAllNodes();
+        for (int h = net.getFirstNode(); h >= 0; h = net.getNextNode(h)) {
+            double score = calculateBICForDAG(net, colWiseData, colNamesArray);
+            double scoreNew = 0;
+            int k;
+            for (k = net.getNextNode(h); k >= 0; k = net.getNextNode(k)) {
+                try {
+                    net.addArc(h, k);
+                    scoreNew = calculateBICForDAG(net, colWiseData, colNamesArray);
+                    if (scoreNew > score) {
+                        break;
+                    }
+                    net.deleteArc(h, k);
+                } catch (Exception e) {
+                    // pass
+                }
+                try {
+                    net.addArc(k, h);
+                    scoreNew = calculateBICForDAG(net, colWiseData, colNamesArray);
+                    if (scoreNew > score) {
+                        break;
+                    }
+                    net.deleteArc(k, h);
+                } catch (Exception e) {
+                    // pass
+                }
+                try {
+                    net.deleteArc(k, h);
+                    scoreNew = calculateBICForDAG(net, colWiseData, colNamesArray);
+                    if (scoreNew > score) {
+                        break;
+                    }
+                    net.addArc(k, h);
+                } catch (Exception e) {
+                    // pass
+                }
+                try {
+                    net.deleteArc(h, k);
+                    scoreNew = calculateBICForDAG(net, colWiseData, colNamesArray);
+                    if (scoreNew > score) {
+                        break;
+                    }
+                    net.addArc(h, k);
+                } catch (Exception e) {
+                    // pass
+                }
+            }
 
+            boolean findMore = true;
+            while (findMore && net.getParents(h).length < U && k >= 0) {
+                if (scoreNew > score) {
+                    score = scoreNew;
+                    // net.addArc(h, k);
+                } else {
+                    findMore = false;
+                }
+            }
+        }
     }
 
-    private static double calculateBICForDAG(Network net) {
-        for (int h = net.getFirstNode(); h >= 0; h = net.getNextNode(h)) {
-
+    private static double calculateBICForDAG(Network net, Map<String, List<Integer>> colWiseData, String[] colNamesArray) {
+        List<int[]> combinations = generateCombinations(colNamesArray.length, 2);
+        double score = 0;
+        double dataLen = 0;
+        double d = 0;
+        // sum up bic score for all combinations of columns
+        for (int[] comb : combinations) {
+            try {
+                Integer[] col1 = colWiseData.get(colNamesArray[comb[0]]).toArray(Integer[]::new);
+                Integer[] col2 = colWiseData.get(colNamesArray[comb[1]]).toArray(Integer[]::new);
+                dataLen = col1.length;
+                boolean nodesConnected = areNodesConnected(net, colNamesArray[comb[0]], colNamesArray[comb[1]]);
+                if (nodesConnected) {
+                    d += 2;
+                } else {
+                    d += 1;
+                }
+                score += applyBICCriteria(col1, col2, nodesConnected);
+            } catch (Exception e) {
+                // pass
+                e.printStackTrace();
+            }
         }
-        return 0;
+
+        return getLN(score) - ((d / 2) * getLN(dataLen));
+    }
+
+    private static double getLN(double score) {
+        return score > 0 ? Math.log(score) : 0;
+    }
+
+    private static double applyBICCriteria(Integer[] col1, Integer[] col2, boolean areNodesConnected) {
+        // get maximum combinations
+        int order1 = getMax(col1);
+        int order2 = getMax(col2);
+        double bicScore = 1;
+
+        double fGivenJ = 0;
+        double jcount = 0;
+        for (int f = 0; f < order1; f++) {
+            for (int j = 0; j < order2; j++) {
+                fGivenJ = 0;
+                jcount = 0;
+                for (int v = 0; v < col1.length; v++) {
+                    if (areNodesConnected) {
+                        // if nodes are connected then use F | J
+                        if (col1[v] == f && col2[v] == j) {
+                            fGivenJ++;
+                        }
+                    } else {
+                        // if nodes are connected then use F, but using the same variable "fGivenJ"
+                        // for compactness of algo
+                        if (col1[v] == f) {
+                            fGivenJ++;
+                        }
+                    }
+                    if (col2[v] == j) {
+                        jcount++;
+                    }
+                }
+            }
+            // calculate bic score by multiplying all marginal / conditional probabilities..
+            if (jcount > 0 && fGivenJ > 0) {
+                bicScore *= (fGivenJ / jcount) * (jcount / col1.length);
+            }
+        }
+
+        return bicScore;
     }
 
     private static Map<String, List<Integer>> getColWiseData(List<String[]> rowWiseData) {
@@ -234,7 +354,6 @@ public class Assignment4 {
                     colWiseData.get(colName).add(Integer.parseInt(elem));
                 }
             }
-            ;
             firstRow.set(false);
         });
         return colWiseData;
@@ -248,9 +367,13 @@ public class Assignment4 {
         combinations.forEach(comb -> {
             Integer[] col1 = colWiseData.get(colNamesArray[comb[0]]).toArray(Integer[]::new);
             Integer[] col2 = colWiseData.get(colNamesArray[comb[1]]).toArray(Integer[]::new);
-            double miScore = computeMI(col1, Arrays.stream(col1).max(Comparator.naturalOrder()).orElse(0) + 1, col2, Arrays.stream(col2).max(Comparator.naturalOrder()).orElse(0) + 1);
+            double miScore = computeMI(col1, getMax(col1), col2, getMax(col2));
             miScores.put(colNamesArray[comb[0]] + "," + colNamesArray[comb[1]], miScore);
         });
         return miScores;
+    }
+
+    private static int getMax(Integer[] col1) {
+        return Arrays.stream(col1).max(Comparator.naturalOrder()).orElse(0) + 1;
     }
 }
