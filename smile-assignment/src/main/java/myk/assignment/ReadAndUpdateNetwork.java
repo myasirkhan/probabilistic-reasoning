@@ -96,7 +96,7 @@ public class ReadAndUpdateNetwork {
      * @param net network
      * @param nodeHandle node id
      */
-    private static void printNodeInfo(Network net, int nodeHandle) {
+    public static void printNodeInfo(Network net, int nodeHandle) {
 
         System.out.printf("Node id/name: %s/%s\n",
                 net.getNodeId(nodeHandle),

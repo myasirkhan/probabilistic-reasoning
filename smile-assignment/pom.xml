@@ -7,6 +7,18 @@
     <groupId>myk.assignment</groupId>
     <artifactId>smile-assignment</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
     <properties>
         <maven.compiler.target>1.8</maven.compiler.target>
         <maven.compiler.source>1.8</maven.compiler.source>
@@ -18,6 +30,11 @@
             <version>1.5.0</version>
             <scope>system</scope>
             <systemPath>${project.basedir}/lib/jsmile-1.5.0.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>4.1</version>
         </dependency>
     </dependencies>
 

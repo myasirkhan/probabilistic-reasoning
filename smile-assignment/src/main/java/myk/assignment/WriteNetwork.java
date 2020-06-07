@@ -89,7 +89,7 @@ public class WriteNetwork {
     }
 
 
-    private static int createCptNode(
+    public static int createCptNode(
             Network net, String id, String name,
             String[] outcomes, int xPos, int yPos) {
         int handle = net.addNode(Network.NodeType.CPT, id);
